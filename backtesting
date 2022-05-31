@@ -1,0 +1,133 @@
+from tracemalloc import start
+import datetime
+from unicodedata import name
+import pybithumb
+import pandas as pd
+import numpy as np
+from xcoin_api_client import *
+from openpyxl import workbook
+from openpyxl import load_workbook
+
+read_xlsx = load_workbook(r'C:/Users/TANDONG/OneDrive/바탕 화면/python/coin_trade_2/data_analysis_2.xlsx',data_only=True)
+read_sheet = read_xlsx['Sheet3']
+
+def get_list(name_call):
+    names = []
+    for cell in name_call:
+        names.append(cell.value)
+    return names
+
+def BBm_cal(k,ma15list,stdevlist):
+    names =[]
+    for i in range(len(ma15list)):
+        names.append(ma15list[i]-k*stdevlist[i])
+    return names
+
+def BBp_cal(k,ma15list,stdevlist):
+    names =[]
+    for i in range(len(ma15list)):
+        names.append(ma15list[i]+k*stdevlist[i])
+    return names
+
+#BB 상수, 변수
+fee = 0.0025
+loss_ratio = 0.06
+k = 2.95
+K = k
+k2 = 0.7
+range_a = 1
+range_b = 6154
+time_row = read_sheet['A'][range_a:range_b]
+open_row = read_sheet['B'][range_a:range_b]
+high_row = read_sheet['C'][range_a:range_b]
+low_row = read_sheet['D'][range_a:range_b]
+close_row = read_sheet['E'][range_a:range_b]
+stdev_row = read_sheet['H'][range_a:range_b]
+ma15_row = read_sheet['G'][range_a:range_b]
+
+times = get_list(time_row)
+opens = get_list(open_row)
+highs = get_list(high_row)
+lows = get_list(low_row)
+closes = get_list(close_row)
+stdevs = get_list(stdev_row)
+ma15_list = get_list(ma15_row)
+
+BBm_list = BBm_cal(K,ma15_list,stdevs)
+BBp_list = BBp_cal(K,ma15_list,stdevs)
+
+#for문 관련
+buy_price = 0
+sell_point = 0
+buy_range = 0
+buy_point = 0
+
+buy_price_list = []
+sell_ratio_list = []
+sell_point_list = []
+buy_point_list = []
+
+for i in range(len(closes)):
+    sell_ratio = 0
+    sell_ratio_2 = 0       
+
+    if buy_price == 0 and closes[i] < BBm_list[i] and buy_point == 0:
+        buy_point = 1
+
+    if buy_price == 0 and buy_point == 1 and closes[i] > opens[i] and closes[i] < ma15_list[i]:
+        buy_point = 0
+        buy_price = closes[i]
+        buy_range = (ma15_list[i] - buy_price) * k2
+
+    if buy_price > 0:
+        if sell_point == 0:
+            if highs[i] > BBp_list[i] :
+                sell_point = 1
+
+        elif sell_point == 1 :
+            if (ma15_list[i]-buy_range) > buy_price*(1+fee) and closes[i] < (ma15_list[i]-buy_range):
+                sell_ratio = (ma15_list[i]-buy_range-buy_price)/buy_price - fee
+                sell_point = 0
+                buy_price = 0
+
+            # if (ma15_list[i]-buy_range) < buy_price*(1+fee) and have_price == 0:
+            #     have_price = buy_price
+            #     sell_point = 0
+            #     buy_price = 0
+
+        if lows[i]< buy_price*(1-loss_ratio):
+            sell_ratio = -loss_ratio- fee
+            sell_point = 0
+            buy_price = 0
+
+    # if have_price > 0:
+    #     if highs[i] > (1+fee)*have_price:
+    #         have_price = 0
+    #         sell_ratio_2 = 0
+
+    #     if lows[i] < (1-loss_ratio)*have_price:
+    #         sell_ratio_2 = (closes[i]-have_price)/have_price -fee
+    #         have_price = 0
+
+
+    buy_price_list.append(buy_price)
+    sell_ratio_list.append(sell_ratio)
+    sell_point_list.append(sell_point)
+    buy_point_list.append(buy_point)
+
+print(sum(sell_ratio_list))
+
+
+df = pd.DataFrame()
+df['time'] = times
+df['high'] = highs
+df['low'] = lows
+df['close'] = closes
+df['ma'] = ma15_list
+df['BBm'] = BBm_list
+df['BBp'] = BBp_list
+df['buy_point'] = buy_point_list
+df['sell_point'] = sell_point_list
+df['buy_price'] = buy_price_list
+df['sell_ratio'] = sell_ratio_list
+df.to_excel(r'C:/Users/TANDONG/OneDrive/바탕 화면/python/coin_trade_2/data_analysis_4.xlsx', index = False)
